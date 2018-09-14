@@ -63,6 +63,7 @@ static void increase_curr_time(void);
 static void gpio_config(void);
 static void adc_common_config(void);
 static void adc1_config(void);
+static void adc2_config(void);
 static void nvic_config(void);
 /* Public functions ----------------------------------------------------------*/
 /* Private functions ---------------------------------------------------------*/
@@ -182,7 +183,6 @@ static void gpio_config(void) {
   */
 static void adc_common_config(void) {
   
-  RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
   ADC_DeInit();
   ADC_CommonInitTypeDef ADC_CommonInitStruct;
   ADC_CommonInitStruct.ADC_Mode = ADC_Mode_Independent;
@@ -197,7 +197,7 @@ static void adc_common_config(void) {
 }
 
 /** @brief  Config the parameters for ADC1
-  *         2 Channels IN3 and IN4
+  *         Channel IN3
   * @param  None
   * 
   * @retval None
@@ -207,6 +207,7 @@ static void adc1_config(void) {
   /** config the port A, PA3 and PA4 analog mode
     * Refer to GPIO config */
   
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
   ADC_InitTypeDef ADC_InitStruct;
   ADC_InitStruct.ADC_Resolution = ADC_Resolution_12b;
   ADC_InitStruct.ADC_ScanConvMode = DISABLE;
@@ -221,6 +222,34 @@ static void adc1_config(void) {
   ADC_RegularChannelConfig(ADC1, ADC_Channel_3, 1, ADC_SampleTime_15Cycles);
   ADC_ITConfig(ADC1, ADC_IT_EOC, ENABLE);
   ADC_Cmd(ADC1, ENABLE);
+}
+
+/** @brief  Config the parameters for ADC2
+  *         Channel IN4
+  * @param  None
+  * 
+  * @retval None
+  */
+static void adc2_config(void) {
+  
+  /** config the port A, PA3 and PA4 analog mode
+    * Refer to GPIO config */
+  
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC2, ENABLE);
+  ADC_InitTypeDef ADC_InitStruct;
+  ADC_InitStruct.ADC_Resolution = ADC_Resolution_12b;
+  ADC_InitStruct.ADC_ScanConvMode = DISABLE;
+  ADC_InitStruct.ADC_ContinuousConvMode = ENABLE;
+  ADC_InitStruct.ADC_ExternalTrigConv = ADC_ExternalTrigConvEdge_None;
+  ADC_InitStruct.ADC_DataAlign = ADC_DataAlign_Right;
+  ADC_InitStruct.ADC_NbrOfConversion = 1;
+  ADC_Init(ADC2, &ADC_InitStruct);
+  /** Check Rank này là dùng khi dùng nhiều kênh trên 1 bộ ADC
+    * đặt vào Rank để chạy luôn phiên
+   */
+  ADC_RegularChannelConfig(ADC2, ADC_Channel_4, 1, ADC_SampleTime_15Cycles);
+  ADC_ITConfig(ADC2, ADC_IT_EOC, ENABLE);
+  ADC_Cmd(ADC2, ENABLE);
 }
 
 /** @brief  Config the parameters for NVIC ADC1
@@ -244,8 +273,10 @@ int main(void) {
   gpio_config();
   adc_common_config();
   adc1_config();
+  adc2_config();
   nvic_config();
   ADC_SoftwareStartConv(ADC1);
+  ADC_SoftwareStartConv(ADC2);
   while (1) {
     
   }
@@ -276,5 +307,9 @@ void ADC_IRQHandler(void) {
         GPIO_WriteBit(GPIOD, LED_BLUE, Bit_RESET);
       }
     }
+  } else if (ADC_GetITStatus(ADC2, ADC_IT_EOC) != RESET) {
+    myADC_value[0] = ADC_GetConversionValue(ADC2);
+    ADC_ClearFlag(ADC2, ADC_FLAG_EOC);
+    ADC_ClearITPendingBit(ADC2, ADC_IT_EOC);
   }
 }
