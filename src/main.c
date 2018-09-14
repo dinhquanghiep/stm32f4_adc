@@ -43,8 +43,6 @@
 #define ADC_TEST    GPIO_Pin_3
 #define ADC_TEST1   GPIO_Pin_4
 
-/* Define PII value base on current value from system */
-
 /* Private typedef -----------------------------------------------------------*/
 
 /* Public variables ----------------------------------------------------------*/
@@ -54,6 +52,7 @@ uint32_t curr_time = 0;
 // static volatile const uint8_t
 static volatile uint16_t myADC_value[80] = {0};
 static uint32_t ADC_avg = 0;
+static uint8_t ADC_count = 32;
 static float Voltage = 0.0;
 static Button_t g_user_button;
 
@@ -64,6 +63,7 @@ static void increase_curr_time(void);
 static void gpio_config(void);
 static void adc_common_config(void);
 static void adc1_config(void);
+static void nvic_config(void);
 /* Public functions ----------------------------------------------------------*/
 /* Private functions ---------------------------------------------------------*/
 
@@ -210,7 +210,7 @@ static void adc1_config(void) {
   ADC_InitTypeDef ADC_InitStruct;
   ADC_InitStruct.ADC_Resolution = ADC_Resolution_12b;
   ADC_InitStruct.ADC_ScanConvMode = DISABLE;
-  ADC_InitStruct.ADC_ContinuousConvMode = DISABLE;
+  ADC_InitStruct.ADC_ContinuousConvMode = ENABLE;
   ADC_InitStruct.ADC_ExternalTrigConv = ADC_ExternalTrigConvEdge_None;
   ADC_InitStruct.ADC_DataAlign = ADC_DataAlign_Right;
   ADC_InitStruct.ADC_NbrOfConversion = 1;
@@ -219,9 +219,24 @@ static void adc1_config(void) {
     * đặt vào Rank để chạy luôn phiên
    */
   ADC_RegularChannelConfig(ADC1, ADC_Channel_3, 1, ADC_SampleTime_15Cycles);
+  ADC_ITConfig(ADC1, ADC_IT_EOC, ENABLE);
   ADC_Cmd(ADC1, ENABLE);
 }
 
+/** @brief  Config the parameters for NVIC ADC1
+  * @param  None
+  * 
+  * @retval None
+  */
+static void nvic_config(void) {
+
+  NVIC_InitTypeDef NVIC_InitStruct;
+  NVIC_InitStruct.NVIC_IRQChannel = ADC_IRQn;
+  NVIC_InitStruct.NVIC_IRQChannelPreemptionPriority = 0;
+  NVIC_InitStruct.NVIC_IRQChannelSubPriority = 0;
+  NVIC_InitStruct.NVIC_IRQChannelCmd = ENABLE;
+  NVIC_Init(&NVIC_InitStruct);
+}
 /* Main source ---------------------------------------------------------------*/
 int main(void) {
   
@@ -229,23 +244,37 @@ int main(void) {
   gpio_config();
   adc_common_config();
   adc1_config();
-  delay(10);
+  nvic_config();
+  ADC_SoftwareStartConv(ADC1);
   while (1) {
-    for (uint8_t tmp = 0; tmp < 32; ++tmp) {
-      ADC_SoftwareStartConv(ADC1);
-      while (ADC_GetFlagStatus(ADC1, ADC_FLAG_EOC) == RESET) {
-        /* waiting for ADC convert */
-      }
-      ADC_avg += ADC_GetConversionValue(ADC1);
-      ADC_ClearFlag(ADC1, ADC_FLAG_EOC);
-    }
-    Voltage = 3.3 * (ADC_avg >> 5) / 4095;
-    ADC_avg = 0;
-    if (Voltage > 1.5) {
-      GPIO_WriteBit(GPIOD, LED_BLUE, Bit_SET);
-    } else {
-      GPIO_WriteBit(GPIOD, LED_BLUE, Bit_RESET);
-    }
+    
   }
   return 0;
+}
+
+/**
+  * @brief  This function handles ADC_IQRHandler interrupt request.
+  * @param  None
+  * @retval None
+  */
+void ADC_IRQHandler(void) {
+  if (ADC_GetITStatus(ADC1, ADC_IT_EOC) != RESET) {
+    ADC_ClearITPendingBit(ADC1, ADC_IT_EOC);
+
+    ADC_avg += ADC_GetConversionValue(ADC1);
+    ADC_ClearFlag(ADC1, ADC_FLAG_EOC);
+    --ADC_count;
+    
+    if (ADC_count == 0) {
+    Voltage = 3.3 * ADC_avg / 32 / 4095;
+    ADC_avg = 0;
+    ADC_count = 32;
+    
+      if (Voltage > 1.5) {
+        GPIO_WriteBit(GPIOD, LED_BLUE, Bit_SET);
+      } else {
+        GPIO_WriteBit(GPIOD, LED_BLUE, Bit_RESET);
+      }
+    }
+  }
 }
