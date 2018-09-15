@@ -67,7 +67,7 @@ OBJCOPY_FLAGS_BIN	:= -O binary
 IAR_COMPILER_DIR 	:= "C:/Program Files (x86)/IAR Systems/Embedded Workbench 8.1/common/bin/IarBuild.exe"
 IAR_PROJECT_FILE	:= $(PROJ_DIR)/IAR/stm32f407.ewp
 IAR_FLAGS					:= -make Release -log all -parallel 4
-IAR_F_BUILD				:= -build Release -log error -parallel 4
+IAR_F_BUILD				:= -build Release -log all -parallel 4
 IAR_PROGRAM_DIR		:= "C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.1\common\bin\IarIdePm.exe"
 IAR_WP_FILE				:= $(PROJ_DIR)/IAR/stm32f407_wp.eww
 

@@ -46,8 +46,8 @@
 #define ADC1_CHANNEL4 GPIO_Pin_4
 #define ADC2_CHANNEL5 GPIO_Pin_5
 
-/* Define PII value base on current value from system */
-
+#define MCU_ID_ADD          ((uint32_t*)0x1FFF7A10)
+#define MCU_FLASH_SIZE_ADD  ((uint16_t*)0x1FFF7A22)
 /* Private typedef -----------------------------------------------------------*/
 
 /* Public variables ----------------------------------------------------------*/
@@ -62,6 +62,10 @@ static float ADC1_IN4_avg = 0;
 static float ADC2_avg = 0;
 static Button_t g_user_button;
 static uint32_t random_num = 0;
+static uint32_t MCU_ID1 = 0;
+static uint32_t MCU_ID2 = 0;
+static uint32_t MCU_ID3 = 0;
+static uint16_t MCU_Flash_size = 0;
 
 /* Private function prototypes -----------------------------------------------*/
 static void rcc_config(void);
@@ -373,15 +377,34 @@ int main(void) {
   ADC_SoftwareStartConv(ADC1);
   ADC_SoftwareStartConv(ADC2);
   delay(10);
+  MCU_ID1 = MCU_ID_ADD[0];
+  MCU_ID2 = 1[MCU_ID_ADD];
+  MCU_ID3 = *(MCU_ID_ADD + 2);
+  MCU_Flash_size = *MCU_FLASH_SIZE_ADD;
   while (1) {
     /* Do nothing here */
     while (RNG_GetFlagStatus(RNG_FLAG_DRDY) != RESET) {
       random_num = RNG_GetRandomNumber();
     }
+    /* below is used to avoid Compiler optimize */
     if (random_num > 0x89545236) {
       GPIO_WriteBit(GPIOD, LED_ORANGE, Bit_SET);
     } else if (random_num < 0x12545236) {
       GPIO_WriteBit(GPIOD, LED_ORANGE, Bit_RESET);
+    }
+    
+    /* below is used to avoid Compiler optimize */
+    if ((MCU_ID1 + MCU_ID2) > 0x89545236) {
+      GPIO_WriteBit(GPIOD, LED_RED, Bit_SET);
+    } else if (MCU_ID3 < 0x12545236) {
+      GPIO_WriteBit(GPIOD, LED_RED, Bit_RESET);
+    }
+
+    /* below is used to avoid Compiler optimize */
+    if (MCU_Flash_size == 1024) {
+      GPIO_WriteBit(GPIOD, LED_GREEN, Bit_SET);
+    } else {
+      GPIO_WriteBit(GPIOD, LED_GREEN, Bit_RESET);
     }
     delay(1000);
   }
