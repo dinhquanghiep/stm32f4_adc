@@ -23,6 +23,7 @@
 #include <stm32f4xx_gpio.h>
 #include <stm32f4xx_dma.h>
 #include <stm32f4xx_adc.h>
+#include <stm32f4xx_rng.h>
 #include <misc.h>
 #include "button.h"
 
@@ -60,6 +61,7 @@ static float ADC1_IN3_avg = 0;
 static float ADC1_IN4_avg = 0;
 static float ADC2_avg = 0;
 static Button_t g_user_button;
+static uint32_t random_num = 0;
 
 /* Private function prototypes -----------------------------------------------*/
 static void rcc_config(void);
@@ -71,6 +73,7 @@ static void adc1_config(void);
 static void adc2_config(void);
 static void dma_config(void);
 static void nvic_config(void);
+static void rng_config(void);
 /* Public functions ----------------------------------------------------------*/
 /* Private functions ---------------------------------------------------------*/
 
@@ -141,7 +144,7 @@ static void rcc_config(void) {
 static void delay(uint32_t ms) {
   uint32_t __time = (uint32_t)56000 * ms;
   while (--__time) {
-    __ASM ("nop");
+    __ASM("nop");
   }
 }
 
@@ -206,7 +209,6 @@ static void gpio_config(void) {
   * @retval None
   */
 static void adc_common_config(void) {
-  
   ADC_DeInit();
   ADC_CommonInitTypeDef ADC_CommonInitStruct;
   ADC_CommonInitStruct.ADC_Mode = ADC_Mode_Independent;
@@ -226,7 +228,6 @@ static void adc_common_config(void) {
   * @retval None1/
   */
 static void adc1_config(void) {
-
   RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
   /* config the port A, PA3 and PA4 as Analog mode */
 
@@ -245,17 +246,16 @@ static void adc1_config(void) {
 
   ADC_DMARequestAfterLastTransferCmd(ADC1, ENABLE);
   ADC_DMACmd(ADC1, ENABLE);
-  
+
   ADC_Cmd(ADC1, ENABLE);
 }
 
- /** @brief  Config the parameters for ADC2 channel 5 and use DMA
+/** @brief  Config the parameters for ADC2 channel 5 and use DMA
   * @param  None
   * 
   * @retval None1/
   */
 static void adc2_config(void) {
-
   RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC2, ENABLE);
   /* config the port A, PA3 and PA4 as Analog mode */
 
@@ -273,7 +273,6 @@ static void adc2_config(void) {
 
   ADC_DMARequestAfterLastTransferCmd(ADC2, ENABLE);
   ADC_DMACmd(ADC2, ENABLE);
-  
   ADC_Cmd(ADC2, ENABLE);
 }
 
@@ -283,7 +282,6 @@ static void adc2_config(void) {
   * @retval None
   */
 static void dma_config(void) {
-  
   RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_DMA2, ENABLE);
   /* DeInit before Init */
   DMA_DeInit(DMA2_Stream4);
@@ -327,8 +325,8 @@ static void dma_config(void) {
   DMA_Init(DMA2_Stream3, &DMA_InitStruct);
   DMA_Cmd(DMA2_Stream3, ENABLE);
 
-  DMA_ITConfig(DMA2_Stream3, DMA_IT_TC,ENABLE);
-  DMA_ITConfig(DMA2_Stream4, DMA_IT_TC,ENABLE);
+  DMA_ITConfig(DMA2_Stream3, DMA_IT_TC, ENABLE);
+  DMA_ITConfig(DMA2_Stream4, DMA_IT_TC, ENABLE);
 }
 
 /** @brief  Config NVIC for DMA
@@ -337,24 +335,33 @@ static void dma_config(void) {
   * @retval None
   */
 static void nvic_config(void) {
-
   NVIC_InitTypeDef NVIC_InitStruct;
-  NVIC_InitStruct.NVIC_IRQChannel = DMA2_Stream3_IRQn; 
+  NVIC_InitStruct.NVIC_IRQChannel = DMA2_Stream3_IRQn;
   NVIC_InitStruct.NVIC_IRQChannelPreemptionPriority = 0;
   NVIC_InitStruct.NVIC_IRQChannelSubPriority = 0;
   NVIC_InitStruct.NVIC_IRQChannelCmd = ENABLE;
   NVIC_Init(&NVIC_InitStruct);
 
-  NVIC_InitStruct.NVIC_IRQChannel = DMA2_Stream4_IRQn; 
+  NVIC_InitStruct.NVIC_IRQChannel = DMA2_Stream4_IRQn;
   NVIC_InitStruct.NVIC_IRQChannelPreemptionPriority = 1;
   NVIC_InitStruct.NVIC_IRQChannelSubPriority = 0;
   NVIC_InitStruct.NVIC_IRQChannelCmd = ENABLE;
   NVIC_Init(&NVIC_InitStruct);
 }
 
+/** @brief  Config Random number generator
+  * @param  None
+  * 
+  * @retval None
+  */
+static void rng_config(void) {
+  RNG_DeInit();
+  RCC_AHB2PeriphClockCmd(RCC_AHB2Periph_RNG, ENABLE);
+  RNG_Cmd(ENABLE);
+}
+
 /* Main source ---------------------------------------------------------------*/
 int main(void) {
-  
   rcc_config();
   gpio_config();
   dma_config();
@@ -362,11 +369,21 @@ int main(void) {
   adc1_config();
   adc2_config();
   nvic_config();
+  rng_config();
   ADC_SoftwareStartConv(ADC1);
   ADC_SoftwareStartConv(ADC2);
   delay(10);
   while (1) {
     /* Do nothing here */
+    while (RNG_GetFlagStatus(RNG_FLAG_DRDY) != RESET) {
+      random_num = RNG_GetRandomNumber();
+    }
+    if (random_num > 0x89545236) {
+      GPIO_WriteBit(GPIOD, LED_ORANGE, Bit_SET);
+    } else if (random_num < 0x12545236) {
+      GPIO_WriteBit(GPIOD, LED_ORANGE, Bit_RESET);
+    }
+    delay(1000);
   }
   return 0;
 }
@@ -389,7 +406,6 @@ void EXTI9_5_IRQHandler(void) {
   * @retval None
   */
 void DMA2_Stream3_IRQHandler(void) {
-
   DMA_ClearITPendingBit(DMA2_Stream3, DMA_IT_TCIF3);
 
   uint32_t tmp_value = 0;
@@ -397,7 +413,7 @@ void DMA2_Stream3_IRQHandler(void) {
     tmp_value += myADC1_value[tmp];
   }
   ADC1_IN3_avg = (float)tmp_value / 20;
- 
+
   tmp_value = 0;
   for (uint8_t tmp = 1; tmp < 40; tmp += 2) {
     tmp_value += myADC1_value[tmp];
