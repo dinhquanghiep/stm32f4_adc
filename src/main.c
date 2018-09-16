@@ -23,7 +23,6 @@
 #include <stm32f4xx_gpio.h>
 #include <stm32f4xx_dma.h>
 #include <stm32f4xx_adc.h>
-#include <stm32f4xx_rng.h>
 #include <misc.h>
 #include "button.h"
 
@@ -40,14 +39,13 @@
 #define LED_ORANGE  GPIO_Pin_13
 #define LED_RED     GPIO_Pin_14
 #define LED_BLUE    GPIO_Pin_15
+#define USER_BUTTON GPIO_Pin_0
 
 /* Config for ADC pin */
 #define ADC1_CHANNEL3 GPIO_Pin_3
 #define ADC1_CHANNEL4 GPIO_Pin_4
 #define ADC2_CHANNEL5 GPIO_Pin_5
 
-#define MCU_ID_ADD          ((uint32_t*)0x1FFF7A10)
-#define MCU_FLASH_SIZE_ADD  ((uint16_t*)0x1FFF7A22)
 /* Private typedef -----------------------------------------------------------*/
 
 /* Public variables ----------------------------------------------------------*/
@@ -73,8 +71,7 @@ static void delay(uint32_t ms);
 static void increase_curr_time(void);
 static void gpio_config(void);
 static void adc_common_config(void);
-static void adc1_config(void);
-static void adc2_config(void);
+static void adc12_config(void);
 static void dma_config(void);
 static void nvic_config(void);
 static void rng_config(void);
@@ -184,7 +181,7 @@ static void gpio_config(void) {
   GPIO_Init(GPIOD, &GPIO_InitStruct);
 
   /* Config pin for User Button */
-  g_user_button.GPIO_Pin = GPIO_Pin_0;
+  g_user_button.GPIO_Pin = USER_BUTTON;
   g_user_button.GPIOx = GPIOA;
   g_user_button.bt_state = RELEASE;
 
@@ -213,16 +210,18 @@ static void gpio_config(void) {
   * @retval None
   */
 static void adc_common_config(void) {
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC2, ENABLE);
   ADC_DeInit();
   ADC_CommonInitTypeDef ADC_CommonInitStruct;
-  ADC_CommonInitStruct.ADC_Mode = ADC_Mode_Independent;
+  ADC_CommonInitStruct.ADC_Mode = ADC_DualMode_Interl;
   /** Xung này là cấp cho ADC để chuyển đổi, được lấy từ APB2
     * Xung ABP2 hiện tại là 84Mhz, theo DS, với VAAD = 2.4 - 3.6V thì
     * xung cho ADC Fmax = 36Mhz, do đó hiệu quả nhất là Div4
     */
   ADC_CommonInitStruct.ADC_Prescaler = ADC_Prescaler_Div4;
-  ADC_CommonInitStruct.ADC_DMAAccessMode = ADC_DMAAccessMode_Disabled;
-  ADC_CommonInitStruct.ADC_TwoSamplingDelay = ADC_TwoSamplingDelay_5Cycles;
+  ADC_CommonInitStruct.ADC_DMAAccessMode = ADC_DMAAccessMode_2;
+  ADC_CommonInitStruct.ADC_TwoSamplingDelay = ADC_TwoSamplingDelay_8Cycles;
   ADC_CommonInit(&ADC_CommonInitStruct);
 }
 
@@ -231,52 +230,26 @@ static void adc_common_config(void) {
   * 
   * @retval None1/
   */
-static void adc1_config(void) {
-  RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
-  /* config the port A, PA3 and PA4 as Analog mode */
-
-  ADC_InitTypeDef ADC_InitStruct;
-  ADC_InitStruct.ADC_Resolution = ADC_Resolution_12b;
-  ADC_InitStruct.ADC_ScanConvMode = ENABLE;
-  ADC_InitStruct.ADC_ContinuousConvMode = ENABLE;
-  ADC_InitStruct.ADC_ExternalTrigConv = ADC_ExternalTrigConvEdge_None;
-  ADC_InitStruct.ADC_DataAlign = ADC_DataAlign_Right;
-  /* 2 channels 3 and 4 */
-  ADC_InitStruct.ADC_NbrOfConversion = 2;
-  ADC_Init(ADC1, &ADC_InitStruct);
-  /* Rank 1 for channel 3 and Rank 2 for channel 4 */
-  ADC_RegularChannelConfig(ADC1, ADC_Channel_3, 1, ADC_SampleTime_15Cycles);
-  ADC_RegularChannelConfig(ADC1, ADC_Channel_4, 2, ADC_SampleTime_15Cycles);
-
-  ADC_DMARequestAfterLastTransferCmd(ADC1, ENABLE);
-  ADC_DMACmd(ADC1, ENABLE);
-
-  ADC_Cmd(ADC1, ENABLE);
-}
-
-/** @brief  Config the parameters for ADC2 channel 5 and use DMA
-  * @param  None
-  * 
-  * @retval None1/
-  */
-static void adc2_config(void) {
-  RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC2, ENABLE);
-  /* config the port A, PA3 and PA4 as Analog mode */
+static void adc12_config(void) {
+  /* config the port A, PA3 */
 
   ADC_InitTypeDef ADC_InitStruct;
   ADC_InitStruct.ADC_Resolution = ADC_Resolution_12b;
   ADC_InitStruct.ADC_ScanConvMode = DISABLE;
   ADC_InitStruct.ADC_ContinuousConvMode = ENABLE;
-  ADC_InitStruct.ADC_ExternalTrigConv = ADC_ExternalTrigConvEdge_None;
+  ADC_InitStruct.ADC_ExternalTrigConvEdge = ADC_ExternalTrigConvEdge_None;
+  ADC_InitStruct.ADC_ExternalTrigConv = ADC_ExternalTrigConv_T1_CC1;
   ADC_InitStruct.ADC_DataAlign = ADC_DataAlign_Right;
-  /* 2 channels 3 and 4 */
   ADC_InitStruct.ADC_NbrOfConversion = 1;
+  ADC_Init(ADC1, &ADC_InitStruct);
+  ADC_RegularChannelConfig(ADC1, ADC_Channel_3, 1, ADC_SampleTime_3Cycles);
+  /* Cấu hình cho ADC2 giống ADC1 */
   ADC_Init(ADC2, &ADC_InitStruct);
-  /* Rank 1 for channel 3 and Rank 2 for channel 4 */
-  ADC_RegularChannelConfig(ADC2, ADC_Channel_5, 1, ADC_SampleTime_15Cycles);
+  ADC_RegularChannelConfig(ADC2, ADC_Channel_3, 1, ADC_SampleTime_3Cycles);
+  /* Bật chế độ DMA dành cho Multi ADC */
+  ADC_MultiModeDMARequestAfterLastTransferCmd(ENABLE);
 
-  ADC_DMARequestAfterLastTransferCmd(ADC2, ENABLE);
-  ADC_DMACmd(ADC2, ENABLE);
+  ADC_Cmd(ADC1, ENABLE);
   ADC_Cmd(ADC2, ENABLE);
 }
 
@@ -288,17 +261,17 @@ static void adc2_config(void) {
 static void dma_config(void) {
   RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_DMA2, ENABLE);
   /* DeInit before Init */
-  DMA_DeInit(DMA2_Stream4);
+  DMA_DeInit(DMA2_Stream0);
   DMA_InitTypeDef DMA_InitStruct;
   DMA_InitStruct.DMA_Channel = DMA_Channel_0;
-  DMA_InitStruct.DMA_PeripheralBaseAddr = ADC1_BASE + 0x004C;
+  DMA_InitStruct.DMA_PeripheralBaseAddr = (uint32_t)(ADC_BASE + 0x08);
   DMA_InitStruct.DMA_Memory0BaseAddr = (uint32_t)myADC1_value;
   DMA_InitStruct.DMA_DIR = DMA_DIR_PeripheralToMemory;
-  DMA_InitStruct.DMA_BufferSize = 40;
+  DMA_InitStruct.DMA_BufferSize = 6;
   DMA_InitStruct.DMA_PeripheralInc = DMA_PeripheralInc_Disable;
   DMA_InitStruct.DMA_MemoryInc = DMA_MemoryInc_Enable;
-  DMA_InitStruct.DMA_PeripheralDataSize = DMA_PeripheralDataSize_HalfWord;
-  DMA_InitStruct.DMA_MemoryDataSize = DMA_MemoryDataSize_HalfWord;
+  DMA_InitStruct.DMA_PeripheralDataSize = DMA_PeripheralDataSize_Word;
+  DMA_InitStruct.DMA_MemoryDataSize = DMA_MemoryDataSize_Word;
   DMA_InitStruct.DMA_Mode = DMA_Mode_Circular;
   DMA_InitStruct.DMA_Priority = DMA_Priority_Medium;
   DMA_InitStruct.DMA_FIFOMode = DMA_FIFOMode_Disable;
@@ -306,31 +279,11 @@ static void dma_config(void) {
   DMA_InitStruct.DMA_FIFOThreshold = DMA_FIFOThreshold_1QuarterFull;
   DMA_InitStruct.DMA_MemoryBurst = DMA_MemoryBurst_Single;
   DMA_InitStruct.DMA_PeripheralBurst = DMA_PeripheralBurst_Single;
-  DMA_Init(DMA2_Stream4, &DMA_InitStruct);
+  DMA_Init(DMA2_Stream0, &DMA_InitStruct);
   // DMA_PeriphIncOffsetSizeConfig(DMA2_Stream4, DMA_PINCOS_WordAligned);
-  DMA_Cmd(DMA2_Stream4, ENABLE);
+  DMA_Cmd(DMA2_Stream0, ENABLE);
 
-  DMA_DeInit(DMA2_Stream3);
-  DMA_InitStruct.DMA_Channel = DMA_Channel_1;
-  DMA_InitStruct.DMA_PeripheralBaseAddr = ADC2_BASE + 0x004C;
-  DMA_InitStruct.DMA_Memory0BaseAddr = (uint32_t)myADC2_value;
-  // DMA_InitStruct.DMA_DIR = DMA_DIR_PeripheralToMemory;
-  DMA_InitStruct.DMA_BufferSize = 20;
-  // DMA_InitStruct.DMA_PeripheralInc = DMA_PeripheralInc_Disable;
-  // DMA_InitStruct.DMA_MemoryInc = DMA_MemoryInc_Enable;
-  // DMA_InitStruct.DMA_PeripheralDataSize = DMA_PeripheralDataSize_HalfWord;
-  // DMA_InitStruct.DMA_MemoryDataSize = DMA_MemoryDataSize_HalfWord;
-  // DMA_InitStruct.DMA_Mode = DMA_Mode_Circular;
-  // DMA_InitStruct.DMA_Priority = DMA_Priority_Medium;
-  // DMA_InitStruct.DMA_FIFOMode = DMA_FIFOMode_Disable;
-  // DMA_InitStruct.DMA_FIFOThreshold = DMA_FIFOThreshold_1QuarterFull;
-  // DMA_InitStruct.DMA_MemoryBurst = DMA_MemoryBurst_Single;
-  // DMA_InitStruct.DMA_PeripheralBurst = DMA_PeripheralBurst_Single;
-  DMA_Init(DMA2_Stream3, &DMA_InitStruct);
-  DMA_Cmd(DMA2_Stream3, ENABLE);
-
-  DMA_ITConfig(DMA2_Stream3, DMA_IT_TC, ENABLE);
-  DMA_ITConfig(DMA2_Stream4, DMA_IT_TC, ENABLE);
+  // DMA_ITConfig(DMA2_Stream0, DMA_IT_TC, ENABLE);
 }
 
 /** @brief  Config NVIC for DMA
@@ -353,74 +306,22 @@ static void nvic_config(void) {
   NVIC_Init(&NVIC_InitStruct);
 }
 
-/** @brief  Config Random number generator
-  * @param  None
-  * 
-  * @retval None
-  */
-static void rng_config(void) {
-  RNG_DeInit();
-  RCC_AHB2PeriphClockCmd(RCC_AHB2Periph_RNG, ENABLE);
-  RNG_Cmd(ENABLE);
-}
-
 /* Main source ---------------------------------------------------------------*/
 int main(void) {
   rcc_config();
   gpio_config();
   dma_config();
   adc_common_config();
-  adc1_config();
-  adc2_config();
+  adc12_config();
   nvic_config();
-  rng_config();
   ADC_SoftwareStartConv(ADC1);
-  ADC_SoftwareStartConv(ADC2);
+  // ADC_SoftwareStartConv(ADC2);
   delay(10);
-  MCU_ID1 = MCU_ID_ADD[0];
-  MCU_ID2 = 1[MCU_ID_ADD];
-  MCU_ID3 = *(MCU_ID_ADD + 2);
-  MCU_Flash_size = *MCU_FLASH_SIZE_ADD;
   while (1) {
     /* Do nothing here */
-    while (RNG_GetFlagStatus(RNG_FLAG_DRDY) != RESET) {
-      random_num = RNG_GetRandomNumber();
-    }
-    /* below is used to avoid Compiler optimize */
-    if (random_num > 0x89545236) {
-      GPIO_WriteBit(GPIOD, LED_ORANGE, Bit_SET);
-    } else if (random_num < 0x12545236) {
-      GPIO_WriteBit(GPIOD, LED_ORANGE, Bit_RESET);
-    }
-    
-    /* below is used to avoid Compiler optimize */
-    if ((MCU_ID1 + MCU_ID2) > 0x89545236) {
-      GPIO_WriteBit(GPIOD, LED_RED, Bit_SET);
-    } else if (MCU_ID3 < 0x12545236) {
-      GPIO_WriteBit(GPIOD, LED_RED, Bit_RESET);
-    }
-
-    /* below is used to avoid Compiler optimize */
-    if (MCU_Flash_size == 1024) {
-      GPIO_WriteBit(GPIOD, LED_GREEN, Bit_SET);
-    } else {
-      GPIO_WriteBit(GPIOD, LED_GREEN, Bit_RESET);
-    }
     delay(1000);
   }
   return 0;
-}
-
-/**
-  * @brief  This function handles EXTI0_IRQHandler interrupt request.
-  * @param  None
-  * @retval None
-  */
-void EXTI9_5_IRQHandler(void) {
-  if (EXTI_GetFlagStatus(EXTI_Line7) != RESET) {
-      GPIO_ToggleBits(GPIOD, LED_RED);
-    EXTI_ClearFlag(EXTI_Line7);
-  }
 }
 
 /**
@@ -428,7 +329,7 @@ void EXTI9_5_IRQHandler(void) {
   * @param  None
   * @retval None
   */
-void DMA2_Stream3_IRQHandler(void) {
+void DMA2_Stream4_IRQHandler(void) {
   DMA_ClearITPendingBit(DMA2_Stream3, DMA_IT_TCIF3);
 
   uint32_t tmp_value = 0;
@@ -449,17 +350,3 @@ void DMA2_Stream3_IRQHandler(void) {
     GPIO_WriteBit(GPIOD, LED_BLUE, Bit_RESET);
   }
 }
-
-/**
-  * @brief  This function handles DMA2_Stream4_IRQHandler interrupt request.
-  * @param  None
-  * @retval None
-  */
-void DMA2_Stream4_IRQHandler(void) {
-  DMA_ClearITPendingBit(DMA2_Stream4, DMA_IT_TCIF4);
-  uint32_t tmp_value = 0;
-  for (uint8_t tmp = 0; tmp < 20; tmp++) {
-    tmp_value += myADC2_value[tmp];
-  }
-}
-
