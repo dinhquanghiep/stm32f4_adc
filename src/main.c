@@ -183,6 +183,8 @@ static void gpio_config(void) {
   * @retval None
   */
 static void adc_common_config(void) {
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC2, ENABLE);
   
   ADC_DeInit();
   ADC_CommonInitTypeDef ADC_CommonInitStruct;
@@ -208,7 +210,6 @@ static void adc1_config(void) {
   /** config the port A, PA3 and PA4 analog mode
     * Refer to GPIO config */
   
-  RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
   ADC_InitTypeDef ADC_InitStruct;
   ADC_InitStruct.ADC_Resolution = ADC_Resolution_12b;
   ADC_InitStruct.ADC_ScanConvMode = DISABLE;
@@ -236,7 +237,6 @@ static void adc2_config(void) {
   /** config the port A, PA3 and PA4 analog mode
     * Refer to GPIO config */
   
-  RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC2, ENABLE);
   ADC_InitTypeDef ADC_InitStruct;
   ADC_InitStruct.ADC_Resolution = ADC_Resolution_12b;
   ADC_InitStruct.ADC_ScanConvMode = DISABLE;
