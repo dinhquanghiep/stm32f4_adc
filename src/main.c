@@ -213,6 +213,9 @@ static void gpio_config(void) {
   * @retval None
   */
 static void adc_common_config(void) {
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC2, ENABLE);
+  
   ADC_DeInit();
   ADC_CommonInitTypeDef ADC_CommonInitStruct;
   ADC_CommonInitStruct.ADC_Mode = ADC_Mode_Independent;
@@ -232,7 +235,6 @@ static void adc_common_config(void) {
   * @retval None1/
   */
 static void adc1_config(void) {
-  RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
   /* config the port A, PA3 and PA4 as Analog mode */
 
   ADC_InitTypeDef ADC_InitStruct;
@@ -260,7 +262,6 @@ static void adc1_config(void) {
   * @retval None1/
   */
 static void adc2_config(void) {
-  RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC2, ENABLE);
   /* config the port A, PA3 and PA4 as Analog mode */
 
   ADC_InitTypeDef ADC_InitStruct;
