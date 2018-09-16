@@ -213,16 +213,14 @@ static void gpio_config(void) {
   * @retval None
   */
 static void adc_common_config(void) {
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC2, ENABLE);
+
   ADC_DeInit();
   ADC_CommonInitTypeDef ADC_CommonInitStruct;
   ADC_CommonInitStruct.ADC_Mode = ADC_Mode_Independent;
-  /** Xung này là cấp cho ADC để chuyển đổi, được lấy từ APB2
-    * Xung ABP2 hiện tại là 84Mhz, theo DS, với VAAD = 2.4 - 3.6V thì
-    * xung cho ADC Fmax = 36Mhz, do đó hiệu quả nhất là Div4
-    */
   ADC_CommonInitStruct.ADC_Prescaler = ADC_Prescaler_Div4;
   ADC_CommonInitStruct.ADC_DMAAccessMode = ADC_DMAAccessMode_Disabled;
-  ADC_CommonInitStruct.ADC_TwoSamplingDelay = ADC_TwoSamplingDelay_5Cycles;
   ADC_CommonInit(&ADC_CommonInitStruct);
 }
 
@@ -232,24 +230,26 @@ static void adc_common_config(void) {
   * @retval None1/
   */
 static void adc1_config(void) {
-  RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
   /* config the port A, PA3 and PA4 as Analog mode */
 
   ADC_InitTypeDef ADC_InitStruct;
   ADC_InitStruct.ADC_Resolution = ADC_Resolution_12b;
-  ADC_InitStruct.ADC_ScanConvMode = ENABLE;
+  ADC_InitStruct.ADC_ScanConvMode = DISABLE;
   ADC_InitStruct.ADC_ContinuousConvMode = ENABLE;
   ADC_InitStruct.ADC_ExternalTrigConv = ADC_ExternalTrigConvEdge_None;
   ADC_InitStruct.ADC_DataAlign = ADC_DataAlign_Right;
-  /* 2 channels 3 and 4 */
-  ADC_InitStruct.ADC_NbrOfConversion = 2;
+  ADC_InitStruct.ADC_NbrOfConversion = 1;
   ADC_Init(ADC1, &ADC_InitStruct);
   /* Rank 1 for channel 3 and Rank 2 for channel 4 */
-  ADC_RegularChannelConfig(ADC1, ADC_Channel_3, 1, ADC_SampleTime_15Cycles);
-  ADC_RegularChannelConfig(ADC1, ADC_Channel_4, 2, ADC_SampleTime_15Cycles);
+  ADC_RegularChannelConfig(ADC1, ADC_Channel_3, 1, ADC_SampleTime_3Cycles);
 
-  ADC_DMARequestAfterLastTransferCmd(ADC1, ENABLE);
-  ADC_DMACmd(ADC1, ENABLE);
+  // ADC_DMARequestAfterLastTransferCmd(ADC1, ENABLE);
+  // ADC_DMACmd(ADC1, ENABLE);
+  ADC_AnalogWatchdogThresholdsConfig(ADC1, 2500, 1500);
+  ADC_AnalogWatchdogSingleChannelConfig(ADC1, ADC_Channel_3);
+  ADC_AnalogWatchdogCmd(ADC1, ADC_AnalogWatchdog_SingleRegEnable);
+
+  ADC_ITConfig(ADC1, ADC_IT_AWD, ENABLE);
 
   ADC_Cmd(ADC1, ENABLE);
 }
@@ -260,7 +260,6 @@ static void adc1_config(void) {
   * @retval None1/
   */
 static void adc2_config(void) {
-  RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC2, ENABLE);
   /* config the port A, PA3 and PA4 as Analog mode */
 
   ADC_InitTypeDef ADC_InitStruct;
@@ -308,7 +307,7 @@ static void dma_config(void) {
   DMA_InitStruct.DMA_PeripheralBurst = DMA_PeripheralBurst_Single;
   DMA_Init(DMA2_Stream4, &DMA_InitStruct);
   // DMA_PeriphIncOffsetSizeConfig(DMA2_Stream4, DMA_PINCOS_WordAligned);
-  DMA_Cmd(DMA2_Stream4, ENABLE);
+  // DMA_Cmd(DMA2_Stream4, ENABLE);
 
   DMA_DeInit(DMA2_Stream3);
   DMA_InitStruct.DMA_Channel = DMA_Channel_1;
@@ -330,7 +329,7 @@ static void dma_config(void) {
   DMA_Cmd(DMA2_Stream3, ENABLE);
 
   DMA_ITConfig(DMA2_Stream3, DMA_IT_TC, ENABLE);
-  DMA_ITConfig(DMA2_Stream4, DMA_IT_TC, ENABLE);
+  // DMA_ITConfig(DMA2_Stream4, DMA_IT_TC, ENABLE);
 }
 
 /** @brief  Config NVIC for DMA
@@ -348,6 +347,12 @@ static void nvic_config(void) {
 
   NVIC_InitStruct.NVIC_IRQChannel = DMA2_Stream4_IRQn;
   NVIC_InitStruct.NVIC_IRQChannelPreemptionPriority = 1;
+  NVIC_InitStruct.NVIC_IRQChannelSubPriority = 0;
+  NVIC_InitStruct.NVIC_IRQChannelCmd = ENABLE;
+  NVIC_Init(&NVIC_InitStruct);
+
+  NVIC_InitStruct.NVIC_IRQChannel = ADC_IRQn;
+  NVIC_InitStruct.NVIC_IRQChannelPreemptionPriority = 2;
   NVIC_InitStruct.NVIC_IRQChannelSubPriority = 0;
   NVIC_InitStruct.NVIC_IRQChannelCmd = ENABLE;
   NVIC_Init(&NVIC_InitStruct);
@@ -461,5 +466,17 @@ void DMA2_Stream4_IRQHandler(void) {
   for (uint8_t tmp = 0; tmp < 20; tmp++) {
     tmp_value += myADC2_value[tmp];
   }
+}
+
+/**
+  * @brief  This function handles ADC_IRQHandler interrupt request.
+  * @param  None
+  * @retval None
+  */
+void ADC_IRQHandler(void) {
+  if (ADC_GetITStatus(ADC1, ADC_IT_AWD) != RESET) {
+    GPIO_ToggleBits(GPIOD, LED_GREEN);
+  }
+  ADC_ClearITPendingBit(ADC1, ADC_IT_AWD);
 }
 
